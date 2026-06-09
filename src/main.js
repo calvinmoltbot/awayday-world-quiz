@@ -469,15 +469,11 @@ const ideas = [
 
 const state = {
   view: "intro",
-  group: "top",
-  countryIndex: 0,
+  quizIndex: 0,
   questionIndex: 0,
   selectedAnswer: "",
+  podium: ["", "", ""],
 };
-
-function countriesForGroup() {
-  return countries.filter((country) => country.group === state.group);
-}
 
 function orderedQuizCountries() {
   return [
@@ -486,12 +482,45 @@ function orderedQuizCountries() {
   ];
 }
 
+function countriesForGroup(group) {
+  return countries.filter((country) => country.group === group);
+}
+
 function currentCountry() {
-  return countriesForGroup()[state.countryIndex];
+  return orderedQuizCountries()[state.quizIndex];
 }
 
 function currentQuestion() {
   return currentCountry().questions[state.questionIndex];
+}
+
+function currentQuestionNumber() {
+  return state.quizIndex * 5 + state.questionIndex + 1;
+}
+
+function currentRoundName() {
+  return currentCountry().group === "top" ? "Top 5" : "Underdogs";
+}
+
+function totalQuestionCount() {
+  return orderedQuizCountries().reduce((sum, country) => sum + country.questions.length, 0);
+}
+
+function isFirstQuestionOfCountry() {
+  return state.questionIndex === 0;
+}
+
+function isLastQuestionOfCountry() {
+  return state.questionIndex === currentCountry().questions.length - 1;
+}
+
+function isLastCountryInRound() {
+  const nextCountry = orderedQuizCountries()[state.quizIndex + 1];
+  return !nextCountry || nextCountry.group !== currentCountry().group;
+}
+
+function countryQuestionOffset(countryIndex, questionIndex) {
+  return countryIndex * 5 + questionIndex + 1;
 }
 
 function flagMarkup(country, size = "large") {
@@ -783,10 +812,15 @@ function slideShell(content, controls = "") {
 
 function statusText() {
   if (state.view === "intro") return "Work Away Day Quiz";
-  if (state.view === "select") return state.group === "top" ? "Top 5 countries" : "Underdogs";
+  if (state.view === "rules") return "How it works";
+  if (state.view === "answer-sheet") return "Table answer sheets";
+  if (state.view === "select") return "Country run order";
   if (state.view === "ideas") return "More quiz formats";
+  if (state.view === "country") return `${currentRoundName()} · ${currentCountry().name}`;
+  if (state.view === "round-break") return `${currentRoundName()} answers`;
+  if (state.view === "final") return "Final scores";
   const country = currentCountry();
-  return `${state.group === "top" ? "Top 5" : "Underdogs"} · ${country.name} · Q${state.questionIndex + 1}/5`;
+  return `${currentRoundName()} · ${country.name} · Q${state.questionIndex + 1}/5`;
 }
 
 function renderIntro() {
@@ -803,9 +837,9 @@ function renderIntro() {
             and invention do the work.
           </p>
           <div class="stat-row">
-            <div><span>Mode</span><strong>Teams of 4-6</strong></div>
+            <div><span>Tables</span><strong>10 teams self-mark</strong></div>
             <div><span>Rounds</span><strong>Top 5 + Underdogs</strong></div>
-            <div><span>Questions</span><strong>50 editable prompts</strong></div>
+            <div><span>Questions</span><strong>${totalQuestionCount()} on paper</strong></div>
           </div>
         </div>
         <div class="hero-flag-wrap">
@@ -819,32 +853,117 @@ function renderIntro() {
       </div>
     `,
     `<button class="button secondary" data-action="ideas">Other formats</button>
-     <button class="button primary" data-action="select">Start the quiz</button>`,
+     <button class="button secondary" data-action="answer-sheet">Answer sheet</button>
+     <button class="button primary" data-action="rules">Run the show</button>`,
+  );
+}
+
+function renderRules() {
+  slideShell(
+    `
+      <div class="rules-layout">
+        <div>
+          <p class="event-line">Run of show</p>
+          <h2>Write first. Mark together. No live scoring admin.</h2>
+        </div>
+        <div class="rules-grid">
+          <article>
+            <span>01</span>
+            <h3>One sheet per table</h3>
+            <p>Each table writes answers on paper. Keep the conversation moving; no phones, no shouting answers out.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Hosted reveal</h3>
+            <p>After each round, the screen walks through the correct answers with the short fact explanation.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Self-mark or swap</h3>
+            <p>Tables mark their own sheet or swap with another table. One point per correct answer unless you decide otherwise.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Final call-out</h3>
+            <p>Collect the top scores at the end and type the top three into the final podium screen.</p>
+          </article>
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="intro">Back</button>
+     <button class="button secondary" data-action="answer-sheet">Print answer sheet</button>
+     <button class="button primary" data-action="select">Start country run</button>`,
+  );
+}
+
+function renderAnswerSheet() {
+  const orderedCountries = orderedQuizCountries();
+  slideShell(
+    `
+      <div class="sheet-layout">
+        <div>
+          <p class="event-line">Printable</p>
+          <h2>Table answer sheet</h2>
+          <p class="sheet-note">Print this before the quiz. Tables only need to write the letter A-D or the answer text.</p>
+        </div>
+        <div class="answer-sheet print-sheet">
+          <div class="sheet-header">
+            <strong>World Stage, Weird Facts</strong>
+            <span>Table name: ______________________</span>
+          </div>
+          <div class="sheet-columns">
+            ${orderedCountries
+              .map(
+                (country, countryIndex) => `
+                  <section>
+                    <h3>${country.name}</h3>
+                    ${country.questions
+                      .map(
+                        (_, questionIndex) => `
+                          <label>
+                            <span>${countryQuestionOffset(countryIndex, questionIndex)}.</span>
+                            <i></i>
+                          </label>
+                        `,
+                      )
+                      .join("")}
+                  </section>
+                `,
+              )
+              .join("")}
+          </div>
+          <div class="sheet-total">
+            <span>Total score:</span>
+            <i></i>
+          </div>
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="rules">Rules</button>
+     <button class="button secondary" data-action="print">Print</button>
+     <button class="button primary" data-action="select">Start country run</button>`,
   );
 }
 
 function renderSelect() {
-  const groupCountries = countriesForGroup();
+  const orderedCountries = orderedQuizCountries();
   slideShell(
     `
       <div class="select-grid">
         <div>
-          <p class="event-line">Choose a round</p>
-          <h2>Pick a country, then let the flag take the screen.</h2>
-          <div class="tabs" role="tablist" aria-label="Ranking groups">
-            <button class="tab ${state.group === "top" ? "active" : ""}" data-group="top" role="tab">Top 5</button>
-            <button class="tab ${state.group === "underdog" ? "active" : ""}" data-group="underdog" role="tab">Underdogs</button>
-          </div>
+          <p class="event-line">Run order</p>
+          <h2>Ten countries. Five questions each. Answers stay on paper.</h2>
+          <p class="select-note">The screen will reveal each country, ask five questions, then pause for marking at the end of the round.</p>
         </div>
         <div class="country-grid">
-          ${groupCountries
+          ${orderedCountries
             .map(
               (country, index) => `
-                <button class="country-tile ${index === state.countryIndex ? "active" : ""}" data-country-index="${index}">
+                <button class="country-tile ${index === state.quizIndex ? "active" : ""}" data-country-index="${index}">
                   ${flagMarkup(country, "mini")}
                   <span>
                     <strong>${country.name}</strong>
-                    <small>Rank #${country.rank} · ${country.questions.length} questions</small>
+                    <small>${country.group === "top" ? "Top 5" : "Underdogs"} · Rank #${country.rank} · Q${countryQuestionOffset(index, 0)}-${countryQuestionOffset(index, country.questions.length - 1)}</small>
                   </span>
                 </button>
               `,
@@ -853,23 +972,14 @@ function renderSelect() {
         </div>
       </div>
     `,
-    `<button class="button secondary" data-action="intro">Back</button>
-     <button class="button primary" data-action="question">Open question</button>`,
+    `<button class="button secondary" data-action="rules">Rules</button>
+     <button class="button secondary" data-action="answer-sheet">Answer sheet</button>
+     <button class="button primary" data-action="country">Reveal country</button>`,
   );
-
-  document.querySelectorAll("[data-group]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.group = button.dataset.group;
-      state.countryIndex = 0;
-      state.questionIndex = 0;
-      state.selectedAnswer = "";
-      renderSelect();
-    });
-  });
 
   document.querySelectorAll("[data-country-index]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.countryIndex = Number(button.dataset.countryIndex);
+      state.quizIndex = Number(button.dataset.countryIndex);
       state.questionIndex = 0;
       state.selectedAnswer = "";
       renderSelect();
@@ -880,62 +990,167 @@ function renderSelect() {
 function renderQuestion() {
   const country = currentCountry();
   const question = currentQuestion();
-  const answered = Boolean(state.selectedAnswer);
   slideShell(
     `
-      <div class="question-grid ${answered ? "is-revealed" : ""}">
+      <div class="question-grid">
         <aside class="question-flag-panel">
           ${flagMarkup(country, "question")}
           <div class="country-meta">
             <span>Rank #${country.rank}</span>
             <strong>${country.name}</strong>
-            <small>${state.group === "top" ? "Top 5" : "Underdogs"} · Question ${state.questionIndex + 1} of ${country.questions.length}</small>
+            <small>${currentRoundName()} · Question ${state.questionIndex + 1} of ${country.questions.length} · Sheet #${currentQuestionNumber()}</small>
           </div>
         </aside>
         <article class="question-panel">
-          <p class="event-line">Multiple choice</p>
+          <p class="event-line">Write answer #${currentQuestionNumber()}</p>
           <h2>${question.prompt}</h2>
           <div class="answers">
             ${question.options
-              .map((option, index) => {
-                const isCorrect = option === question.answer;
-                const isSelected = option === state.selectedAnswer;
-                const className = answered
-                  ? isCorrect
-                    ? "correct"
-                    : isSelected
-                      ? "incorrect"
-                      : "muted"
-                  : "";
-                return `<button class="answer ${className}" data-answer="${option}">
+              .map(
+                (option, index) => `<div class="answer">
                   <span>${String.fromCharCode(65 + index)}</span>${option}
-                </button>`;
-              })
+                </div>`,
+              )
               .join("")}
           </div>
-          ${
-            answered
-              ? `<div class="reveal">
-                  <span>Answer reveal</span>
-                  <strong>${question.answer}</strong>
-                  <p>${question.explanation}</p>
-                </div>`
-              : ""
-          }
         </article>
       </div>
     `,
-    `<button class="button secondary" data-action="select">Countries</button>
+    `<button class="button secondary" data-action="select">Run order</button>
      <button class="button secondary" data-action="prev-question">Previous</button>
-     <button class="button primary" data-action="${answered ? "next-question" : "reveal"}">${answered ? "Next question" : "Reveal answer"}</button>`,
+     <button class="button primary" data-action="next-question">${nextQuestionLabel()}</button>`,
+  );
+}
+
+function nextQuestionLabel() {
+  if (isLastQuestionOfCountry() && isLastCountryInRound()) return "Finish round";
+  if (isLastQuestionOfCountry()) return "Next country";
+  return "Next question";
+}
+
+function renderCountryReveal() {
+  const country = currentCountry();
+  slideShell(
+    `
+      <div class="country-reveal-layout">
+        <div class="country-reveal-copy">
+          <p class="event-line">${currentRoundName()} · Sheet questions ${countryQuestionOffset(state.quizIndex, 0)}-${countryQuestionOffset(state.quizIndex, country.questions.length - 1)}</p>
+          <h1>${country.name}</h1>
+          <p>Five questions. Write your answers down. We will mark this round together after the questions.</p>
+          <div class="country-reveal-stat">
+            <span>FIFA rank</span>
+            <strong>#${country.rank}</strong>
+          </div>
+        </div>
+        <div class="country-reveal-flag">
+          ${flagMarkup(country, "hero")}
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="select">Run order</button>
+     <button class="button primary" data-action="question">Start ${country.name}</button>`,
+  );
+}
+
+function renderRoundBreak() {
+  const round = currentRoundName();
+  const roundCountries = countriesForGroup(currentCountry().group);
+  slideShell(
+    `
+      <div class="round-break-layout">
+        <div>
+          <p class="event-line">${round} complete</p>
+          <h2>Swap sheets or self-mark this round.</h2>
+          <p class="sheet-note">You are about to reveal ${roundCountries.length * 5} answers. Tables add their score at the end of the sequence.</p>
+        </div>
+        <div class="round-country-strip">
+          ${roundCountries
+            .map(
+              (country) => `
+                <article>
+                  ${flagMarkup(country, "mini")}
+                  <strong>${country.name}</strong>
+                  <span>5 marks</span>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="prev-question">Back</button>
+     <button class="button primary" data-action="start-reveal">Reveal ${round} answers</button>`,
+  );
+}
+
+function renderAnswerReveal() {
+  const country = currentCountry();
+  const question = currentQuestion();
+  slideShell(
+    `
+      <div class="answer-reveal-layout">
+        <aside class="answer-key-card">
+          ${flagMarkup(country, "question")}
+          <div class="country-meta">
+            <span>Answer #${currentQuestionNumber()}</span>
+            <strong>${country.name}</strong>
+            <small>${currentRoundName()} · ${state.questionIndex + 1} of ${country.questions.length}</small>
+          </div>
+        </aside>
+        <article class="answer-panel">
+          <p class="event-line">Mark your sheet</p>
+          <h2>${question.prompt}</h2>
+          <div class="correct-answer">
+            <span>Correct answer</span>
+            <strong>${question.answer}</strong>
+          </div>
+          <p>${question.explanation}</p>
+        </article>
+      </div>
+    `,
+    `<button class="button secondary" data-action="round-break">Round pause</button>
+     <button class="button secondary" data-action="prev-answer">Previous answer</button>
+     <button class="button primary" data-action="next-answer">${nextAnswerLabel()}</button>`,
+  );
+}
+
+function nextAnswerLabel() {
+  if (isLastQuestionOfCountry() && isLastCountryInRound() && currentCountry().group === "underdog") return "Final scores";
+  if (isLastQuestionOfCountry() && isLastCountryInRound()) return "Next round";
+  if (isLastQuestionOfCountry()) return "Next country answers";
+  return "Next answer";
+}
+
+function renderFinal() {
+  slideShell(
+    `
+      <div class="final-layout">
+        <div>
+          <p class="event-line">Final call-out</p>
+          <h2>Collect the top scores and crown the room.</h2>
+          <p class="sheet-note">Ask tables to shout their final scores. Type the top three here for the final reveal.</p>
+        </div>
+        <div class="podium">
+          ${["1st place", "2nd place", "3rd place"]
+            .map(
+              (label, index) => `
+                <label>
+                  <span>${label}</span>
+                  <input value="${state.podium[index]}" data-podium="${index}" placeholder="Table name + score" />
+                </label>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="round-break">Back to answers</button>
+     <button class="button primary" data-action="intro">Finish</button>`,
   );
 
-  document.querySelectorAll("[data-answer]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (!state.selectedAnswer) {
-        state.selectedAnswer = button.dataset.answer;
-        renderQuestion();
-      }
+  document.querySelectorAll("[data-podium]").forEach((input) => {
+    input.addEventListener("input", () => {
+      state.podium[Number(input.dataset.podium)] = input.value;
     });
   });
 }
@@ -976,10 +1191,19 @@ function bindDeckControls() {
 
 function runAction(action) {
   if (action === "intro") state.view = "intro";
+  if (action === "rules") state.view = "rules";
+  if (action === "answer-sheet") state.view = "answer-sheet";
   if (action === "select") state.view = "select";
+  if (action === "country") state.view = "country";
   if (action === "question") state.view = "question";
+  if (action === "round-break") state.view = "round-break";
+  if (action === "answer") state.view = "answer";
+  if (action === "final") state.view = "final";
   if (action === "ideas") state.view = "ideas";
-  if (action === "reveal") state.selectedAnswer = currentQuestion().answer;
+  if (action === "print") window.print();
+  if (action === "start-reveal") startRoundReveal();
+  if (action === "prev-answer") moveAnswer(-1);
+  if (action === "next-answer") moveAnswer(1);
   if (action === "prev-question") moveQuestion(-1);
   if (action === "next-question") moveQuestion(1);
   render();
@@ -988,47 +1212,105 @@ function runAction(action) {
 function moveQuestion(direction) {
   const orderedCountries = orderedQuizCountries();
   const country = currentCountry();
-  const absoluteCountryIndex = orderedCountries.findIndex((item) => item.id === country.id);
   const nextQuestionIndex = state.questionIndex + direction;
 
   if (nextQuestionIndex >= 0 && nextQuestionIndex < country.questions.length) {
     state.questionIndex = nextQuestionIndex;
+    state.view = "question";
   } else {
-    const nextCountryIndex =
-      (absoluteCountryIndex + direction + orderedCountries.length) % orderedCountries.length;
+    if (direction > 0 && isLastCountryInRound()) {
+      state.view = "round-break";
+      return;
+    }
+    const nextCountryIndex = (state.quizIndex + direction + orderedCountries.length) % orderedCountries.length;
     const nextCountry = orderedCountries[nextCountryIndex];
-    const nextGroupCountries = countries.filter((item) => item.group === nextCountry.group);
-    state.group = nextCountry.group;
-    state.countryIndex = nextGroupCountries.findIndex((item) => item.id === nextCountry.id);
+    state.quizIndex = nextCountryIndex;
     state.questionIndex = direction > 0 ? 0 : nextCountry.questions.length - 1;
+    state.view = direction > 0 ? "country" : "question";
+  }
+  state.selectedAnswer = "";
+}
+
+function startRoundReveal() {
+  const firstIndex = orderedQuizCountries().findIndex((country) => country.group === currentCountry().group);
+  state.quizIndex = Math.max(0, firstIndex);
+  state.questionIndex = 0;
+  state.view = "answer";
+}
+
+function moveAnswer(direction) {
+  const orderedCountries = orderedQuizCountries();
+  const country = currentCountry();
+  const nextQuestionIndex = state.questionIndex + direction;
+
+  if (nextQuestionIndex >= 0 && nextQuestionIndex < country.questions.length) {
+    state.questionIndex = nextQuestionIndex;
+    state.view = "answer";
+    return;
   }
 
-  state.selectedAnswer = "";
-  state.view = "question";
+  const nextCountryIndex = state.quizIndex + direction;
+  const nextCountry = orderedCountries[nextCountryIndex];
+  if (!nextCountry || nextCountry.group !== country.group) {
+    if (direction > 0 && country.group === "top") {
+      const nextRoundIndex = orderedCountries.findIndex((item) => item.group === "underdog");
+      state.quizIndex = nextRoundIndex;
+      state.questionIndex = 0;
+      state.view = "country";
+      return;
+    }
+    if (direction > 0) {
+      state.view = "final";
+      return;
+    }
+    state.view = "round-break";
+    return;
+  }
+
+  state.quizIndex = nextCountryIndex;
+  state.questionIndex = direction > 0 ? 0 : nextCountry.questions.length - 1;
+  state.view = "answer";
 }
 
 function render() {
   if (state.view === "intro") renderIntro();
+  if (state.view === "rules") renderRules();
+  if (state.view === "answer-sheet") renderAnswerSheet();
   if (state.view === "select") renderSelect();
+  if (state.view === "country") renderCountryReveal();
   if (state.view === "question") renderQuestion();
+  if (state.view === "round-break") renderRoundBreak();
+  if (state.view === "answer") renderAnswerReveal();
+  if (state.view === "final") renderFinal();
   if (state.view === "ideas") renderIdeas();
 }
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") {
-    if (state.view === "intro") runAction("select");
-    else if (state.view === "select") runAction("question");
-    else if (state.view === "question" && state.selectedAnswer) runAction("next-question");
-    else if (state.view === "question") runAction("reveal");
+    if (state.view === "intro") runAction("rules");
+    else if (state.view === "rules") runAction("select");
+    else if (state.view === "answer-sheet") runAction("select");
+    else if (state.view === "select") runAction("country");
+    else if (state.view === "country") runAction("question");
+    else if (state.view === "question") runAction("next-question");
+    else if (state.view === "round-break") runAction("start-reveal");
+    else if (state.view === "answer") runAction("next-answer");
+    else if (state.view === "final") runAction("intro");
   }
 
   if (event.key === "ArrowLeft") {
     if (state.view === "question") runAction("prev-question");
+    else if (state.view === "country") runAction("select");
+    else if (state.view === "round-break") runAction("prev-question");
+    else if (state.view === "answer") runAction("prev-answer");
+    else if (state.view === "rules") runAction("intro");
+    else if (state.view === "answer-sheet") runAction("rules");
     else if (state.view === "select") runAction("intro");
     else if (state.view === "ideas") runAction("intro");
   }
 
   if (event.key.toLowerCase() === "i") runAction("ideas");
+  if (event.key.toLowerCase() === "p") runAction("answer-sheet");
 });
 
 render();
