@@ -1,4 +1,5 @@
 import "./styles.css";
+import * as THREE from "three";
 
 const countries = [
   {
@@ -443,144 +444,591 @@ const countries = [
   },
 ];
 
-let currentGroup = "top";
-let currentCountryIndex = 0;
-let currentQuestionIndex = 0;
+const app = document.querySelector("#app");
+const flagTextureCache = new Map();
+let activeFlagRenderers = [];
 
-const countryList = document.querySelector("#countryList");
-const bankGrid = document.querySelector("#bankGrid");
-const tabs = document.querySelectorAll(".tab");
-const countryName = document.querySelector("#countryName");
-const rankPill = document.querySelector("#rankPill");
-const roundLabel = document.querySelector("#roundLabel");
-const activeFlag = document.querySelector("#activeFlag");
-const questionText = document.querySelector("#questionText");
-const answers = document.querySelector("#answers");
-const reveal = document.querySelector("#reveal");
-const correctAnswer = document.querySelector("#correctAnswer");
-const explanation = document.querySelector("#explanation");
-const prevQuestion = document.querySelector("#prevQuestion");
-const nextQuestion = document.querySelector("#nextQuestion");
+const ideas = [
+  {
+    title: "Company World Cup",
+    body: "Departments become countries. Rounds cover office lore, project landmarks, client geography, and mystery metrics.",
+  },
+  {
+    title: "Passport Stamp Relay",
+    body: "Stations around the room with fast challenges: taste, map, emoji translation, speed puzzle, and mini pitch.",
+  },
+  {
+    title: "Pitch Deck or Fiction?",
+    body: "Teams decide whether dramatic business statements are from real decks, press releases, or pure invention.",
+  },
+  {
+    title: "Inbox Archaeology",
+    body: "Harmless company history becomes the quiz: old product names, launch dates, team rituals, and mystery screenshots.",
+  },
+];
 
-function groupCountries() {
-  return countries.filter((country) => country.group === currentGroup);
+const state = {
+  view: "intro",
+  group: "top",
+  countryIndex: 0,
+  questionIndex: 0,
+  selectedAnswer: "",
+};
+
+function countriesForGroup() {
+  return countries.filter((country) => country.group === state.group);
 }
 
-function activeCountry() {
-  return groupCountries()[currentCountryIndex];
+function orderedQuizCountries() {
+  return [
+    ...countries.filter((country) => country.group === "top"),
+    ...countries.filter((country) => country.group === "underdog"),
+  ];
 }
 
-function activeQuestion() {
-  return activeCountry().questions[currentQuestionIndex];
+function currentCountry() {
+  return countriesForGroup()[state.countryIndex];
 }
 
-function renderCountryList() {
-  countryList.innerHTML = groupCountries()
-    .map(
-      (country, index) => `
-        <button class="country-row ${index === currentCountryIndex ? "active" : ""}" data-index="${index}">
-          <span class="flag mini-flag ${country.flag}"></span>
-          <span>
+function currentQuestion() {
+  return currentCountry().questions[state.questionIndex];
+}
+
+function flagMarkup(country, size = "large") {
+  return `
+    <div class="flag-scene ${size}" data-flag-id="${country.id}" aria-label="${country.name} flag">
+      <div class="flag-pole"></div>
+      <div class="flag-cord"></div>
+      <div class="flag-canvas-wrap"></div>
+    </div>
+  `;
+}
+
+function initFlagScenes() {
+  document.querySelectorAll(".flag-scene").forEach((element) => {
+    const country = countries.find((item) => item.id === element.dataset.flagId);
+    if (!country) return;
+    activeFlagRenderers.push(createFlagRenderer(element, country));
+  });
+}
+
+function disposeFlagScenes() {
+  activeFlagRenderers.forEach((flag) => flag.dispose());
+  activeFlagRenderers = [];
+}
+
+function createFlagRenderer(element, country) {
+  const mount = element.querySelector(".flag-canvas-wrap");
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-2.08, 2.08, 1.28, -1.28, 0.1, 20);
+  camera.position.set(0, 0, 6);
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: true,
+    powerPreference: "high-performance",
+  });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  mount.appendChild(renderer.domElement);
+
+  const geometry = new THREE.PlaneGeometry(3.85, 2.2, 112, 46);
+  const basePositions = Float32Array.from(geometry.attributes.position.array);
+  const texture = getFlagTexture(country.id);
+  const material = new THREE.MeshPhongMaterial({
+    map: texture,
+    side: THREE.DoubleSide,
+    shininess: 38,
+    specular: new THREE.Color(0x33475f),
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.x = 0.18;
+  mesh.rotation.y = -0.18;
+  scene.add(mesh);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.25));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.1);
+  keyLight.position.set(-1.5, 2.5, 4);
+  scene.add(keyLight);
+  const rimLight = new THREE.DirectionalLight(0x7fc7ff, 0.9);
+  rimLight.position.set(2, -1.5, 3);
+  scene.add(rimLight);
+
+  let frameId = 0;
+  let disposed = false;
+
+  function resize() {
+    const rect = mount.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    renderer.setSize(width, height, false);
+    camera.left = -2.08;
+    camera.right = 2.08;
+    camera.top = 1.28;
+    camera.bottom = -1.28;
+    camera.updateProjectionMatrix();
+  }
+
+  function animate(time = 0) {
+    if (disposed) return;
+    const seconds = time * 0.001;
+    const positions = geometry.attributes.position.array;
+    for (let index = 0; index < positions.length; index += 3) {
+      const baseX = basePositions[index];
+      const baseY = basePositions[index + 1];
+      const progress = THREE.MathUtils.clamp((baseX + 1.925) / 3.85, 0, 1);
+      const looseness = progress * progress;
+      const gust = Math.sin(seconds * 0.85) * 0.18;
+      const waveA = Math.sin(progress * Math.PI * 3.4 + seconds * 2.4 + gust);
+      const waveB = Math.sin(progress * Math.PI * 8.2 - seconds * 3.1);
+      positions[index] = baseX + Math.sin(progress * Math.PI * 2.1 + seconds * 1.2) * 0.055 * looseness;
+      positions[index + 1] = baseY + (waveB * 0.035 + Math.cos(seconds * 1.7 + progress * 4) * 0.02) * looseness;
+      positions[index + 2] = (waveA * 0.32 + waveB * 0.08) * looseness;
+    }
+    geometry.attributes.position.needsUpdate = true;
+    geometry.computeVertexNormals();
+    mesh.rotation.z = Math.sin(seconds * 0.7) * 0.018;
+    renderer.render(scene, camera);
+    frameId = requestAnimationFrame(animate);
+  }
+
+  resize();
+  animate();
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(mount);
+
+  return {
+    dispose() {
+      disposed = true;
+      cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      geometry.dispose();
+      material.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+}
+
+function getFlagTexture(countryId) {
+  if (flagTextureCache.has(countryId)) return flagTextureCache.get(countryId);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 720;
+  const ctx = canvas.getContext("2d");
+  drawFlag(ctx, countryId, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  flagTextureCache.set(countryId, texture);
+  return texture;
+}
+
+function drawFlag(ctx, countryId, width, height) {
+  ctx.clearRect(0, 0, width, height);
+  const stripe = (color, x, y, w, h) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+  };
+
+  if (countryId === "argentina") {
+    stripe("#75aadb", 0, 0, width, height / 3);
+    stripe("#ffffff", 0, height / 3, width, height / 3);
+    stripe("#75aadb", 0, (height / 3) * 2, width, height / 3);
+    drawSun(ctx, width / 2, height / 2, height * 0.095);
+  } else if (countryId === "france") {
+    stripe("#002654", 0, 0, width / 3, height);
+    stripe("#ffffff", width / 3, 0, width / 3, height);
+    stripe("#ce1126", (width / 3) * 2, 0, width / 3, height);
+  } else if (countryId === "spain") {
+    stripe("#aa151b", 0, 0, width, height * 0.25);
+    stripe("#f1bf00", 0, height * 0.25, width, height * 0.5);
+    stripe("#aa151b", 0, height * 0.75, width, height * 0.25);
+  } else if (countryId === "england") {
+    stripe("#ffffff", 0, 0, width, height);
+    stripe("#c8102e", width * 0.43, 0, width * 0.14, height);
+    stripe("#c8102e", 0, height * 0.39, width, height * 0.22);
+  } else if (countryId === "brazil") {
+    stripe("#009b3a", 0, 0, width, height);
+    ctx.fillStyle = "#ffdf00";
+    ctx.beginPath();
+    ctx.moveTo(width / 2, height * 0.12);
+    ctx.lineTo(width * 0.88, height / 2);
+    ctx.lineTo(width / 2, height * 0.88);
+    ctx.lineTo(width * 0.12, height / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#002776";
+    ctx.beginPath();
+    ctx.arc(width / 2, height / 2, height * 0.19, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (countryId === "san-marino") {
+    stripe("#ffffff", 0, 0, width, height / 2);
+    stripe("#5eb6e4", 0, height / 2, width, height / 2);
+    drawBadge(ctx, width / 2, height / 2, height * 0.1, "#f2c14e", "#3a9c6d");
+  } else if (countryId === "us-virgin-islands") {
+    stripe("#ffffff", 0, 0, width, height);
+    drawBadge(ctx, width / 2, height / 2, height * 0.15, "#f2c14e", "#4f78c7");
+  } else {
+    drawBlueEnsign(ctx, width, height, countryId);
+  }
+
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, "rgba(255,255,255,0.22)");
+  gradient.addColorStop(0.18, "rgba(255,255,255,0)");
+  gradient.addColorStop(0.34, "rgba(0,0,0,0.14)");
+  gradient.addColorStop(0.5, "rgba(255,255,255,0.16)");
+  gradient.addColorStop(0.7, "rgba(0,0,0,0.12)");
+  gradient.addColorStop(1, "rgba(255,255,255,0.08)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function drawSun(ctx, x, y, radius) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#f6b40e";
+  for (let i = 0; i < 16; i += 1) {
+    ctx.rotate(Math.PI / 8);
+    ctx.beginPath();
+    ctx.moveTo(0, -radius * 1.7);
+    ctx.lineTo(radius * 0.16, -radius * 0.72);
+    ctx.lineTo(-radius * 0.16, -radius * 0.72);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBadge(ctx, x, y, radius, outer, inner) {
+  ctx.fillStyle = outer;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = inner;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBlueEnsign(ctx, width, height, countryId) {
+  ctx.fillStyle = "#012169";
+  ctx.fillRect(0, 0, width, height);
+  drawUnionCanton(ctx, 0, 0, width * 0.42, height * 0.5);
+  const colors = {
+    anguilla: ["#ffffff", "#f28e2b"],
+    "british-virgin-islands": ["#0a8f3c", "#f2c14e"],
+    "turks-caicos": ["#f2c14e", "#3ab6d6"],
+  }[countryId] || ["#ffffff", "#f2c14e"];
+  drawBadge(ctx, width * 0.72, height * 0.52, height * 0.12, colors[0], colors[1]);
+}
+
+function drawUnionCanton(ctx, x, y, width, height) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#012169";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = height * 0.18;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(width, height);
+  ctx.moveTo(width, 0);
+  ctx.lineTo(0, height);
+  ctx.stroke();
+  ctx.strokeStyle = "#c8102e";
+  ctx.lineWidth = height * 0.08;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(width, height);
+  ctx.moveTo(width, 0);
+  ctx.lineTo(0, height);
+  ctx.stroke();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(width * 0.42, 0, width * 0.16, height);
+  ctx.fillRect(0, height * 0.38, width, height * 0.24);
+  ctx.fillStyle = "#c8102e";
+  ctx.fillRect(width * 0.46, 0, width * 0.08, height);
+  ctx.fillRect(0, height * 0.44, width, height * 0.12);
+  ctx.restore();
+}
+
+function slideShell(content, controls = "") {
+  disposeFlagScenes();
+  app.innerHTML = `
+    <section class="slide">
+      <header class="deck-topbar">
+        <div class="brand">
+          <span class="brand-mark">WS</span>
+          <span>World Stage, Weird Facts</span>
+        </div>
+        <div class="deck-status">${statusText()}</div>
+      </header>
+      <div class="slide-content">${content}</div>
+      <footer class="deck-controls">
+        <div class="keyboard-hint">Use ← / → to host the quiz</div>
+        <div class="control-row">${controls}</div>
+      </footer>
+    </section>
+  `;
+  bindDeckControls();
+  initFlagScenes();
+}
+
+function statusText() {
+  if (state.view === "intro") return "Work Away Day Quiz";
+  if (state.view === "select") return state.group === "top" ? "Top 5 countries" : "Underdogs";
+  if (state.view === "ideas") return "More quiz formats";
+  const country = currentCountry();
+  return `${state.group === "top" ? "Top 5" : "Underdogs"} · ${country.name} · Q${state.questionIndex + 1}/5`;
+}
+
+function renderIntro() {
+  const country = countries[0];
+  slideShell(
+    `
+      <div class="intro-grid">
+        <div class="intro-copy">
+          <p class="event-line">Work Away Day Quiz</p>
+          <h1>World Stage, Weird Facts</h1>
+          <p>
+            A World Cup-flavoured quiz with zero football knowledge required.
+            Rankings set the stage; culture, science, geography, food, history,
+            and invention do the work.
+          </p>
+          <div class="stat-row">
+            <div><span>Mode</span><strong>Teams of 4-6</strong></div>
+            <div><span>Rounds</span><strong>Top 5 + Underdogs</strong></div>
+            <div><span>Questions</span><strong>50 editable prompts</strong></div>
+          </div>
+        </div>
+        <div class="hero-flag-wrap">
+          ${flagMarkup(country, "hero")}
+          <div class="country-callout">
+            <span>Opening country</span>
             <strong>${country.name}</strong>
-            <small>${country.questions.length} non-football questions</small>
-          </span>
-          <span class="rank">#${country.rank}</span>
-        </button>
-      `,
-    )
-    .join("");
+            <small>FIFA men’s ranking #${country.rank} in the April 2026 table</small>
+          </div>
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="ideas">Other formats</button>
+     <button class="button primary" data-action="select">Start the quiz</button>`,
+  );
+}
 
-  document.querySelectorAll(".country-row").forEach((row) => {
-    row.addEventListener("click", () => {
-      currentCountryIndex = Number(row.dataset.index);
-      currentQuestionIndex = 0;
-      render();
+function renderSelect() {
+  const groupCountries = countriesForGroup();
+  slideShell(
+    `
+      <div class="select-grid">
+        <div>
+          <p class="event-line">Choose a round</p>
+          <h2>Pick a country, then let the flag take the screen.</h2>
+          <div class="tabs" role="tablist" aria-label="Ranking groups">
+            <button class="tab ${state.group === "top" ? "active" : ""}" data-group="top" role="tab">Top 5</button>
+            <button class="tab ${state.group === "underdog" ? "active" : ""}" data-group="underdog" role="tab">Underdogs</button>
+          </div>
+        </div>
+        <div class="country-grid">
+          ${groupCountries
+            .map(
+              (country, index) => `
+                <button class="country-tile ${index === state.countryIndex ? "active" : ""}" data-country-index="${index}">
+                  ${flagMarkup(country, "mini")}
+                  <span>
+                    <strong>${country.name}</strong>
+                    <small>Rank #${country.rank} · ${country.questions.length} questions</small>
+                  </span>
+                </button>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="intro">Back</button>
+     <button class="button primary" data-action="question">Open question</button>`,
+  );
+
+  document.querySelectorAll("[data-group]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.group = button.dataset.group;
+      state.countryIndex = 0;
+      state.questionIndex = 0;
+      state.selectedAnswer = "";
+      renderSelect();
+    });
+  });
+
+  document.querySelectorAll("[data-country-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.countryIndex = Number(button.dataset.countryIndex);
+      state.questionIndex = 0;
+      state.selectedAnswer = "";
+      renderSelect();
     });
   });
 }
 
-function renderQuiz() {
-  const country = activeCountry();
-  const question = activeQuestion();
-  countryName.textContent = country.name;
-  rankPill.textContent = `Rank #${country.rank}`;
-  roundLabel.textContent = `${currentGroup === "top" ? "Top 5" : "Underdogs"} · Question ${currentQuestionIndex + 1} of ${country.questions.length}`;
-  activeFlag.className = `flag ${country.flag}`;
-  activeFlag.innerHTML = country.id === "argentina" ? '<span class="sun">✦</span>' : "";
-  activeFlag.style.animation = "none";
-  activeFlag.offsetHeight;
-  activeFlag.style.animation = "";
-  questionText.textContent = question.prompt;
-  reveal.hidden = true;
-  correctAnswer.textContent = "";
-  explanation.textContent = "";
-  answers.innerHTML = question.options
-    .map((option) => `<button class="answer" data-answer="${option}">${option}</button>`)
-    .join("");
-
-  document.querySelectorAll(".answer").forEach((button) => {
-    button.addEventListener("click", () => revealAnswer(button));
-  });
-}
-
-function revealAnswer(selectedButton) {
-  const question = activeQuestion();
-  document.querySelectorAll(".answer").forEach((button) => {
-    button.disabled = true;
-    if (button.dataset.answer === question.answer) {
-      button.classList.add("correct");
-    } else if (button === selectedButton) {
-      button.classList.add("incorrect");
-    }
-  });
-  reveal.hidden = false;
-  correctAnswer.textContent = question.answer;
-  explanation.textContent = question.explanation;
-}
-
-function renderBank() {
-  bankGrid.innerHTML = countries
-    .slice(0, 4)
-    .map(
-      (country) => `
-      <article class="bank-card">
-        <span class="flag mini-flag ${country.flag}"></span>
-        <h3>${country.name}</h3>
-        <ul>
-          ${country.questions.slice(0, 3).map((question) => `<li>${question.prompt}</li>`).join("")}
-        </ul>
-      </article>
+function renderQuestion() {
+  const country = currentCountry();
+  const question = currentQuestion();
+  const answered = Boolean(state.selectedAnswer);
+  slideShell(
+    `
+      <div class="question-grid ${answered ? "is-revealed" : ""}">
+        <aside class="question-flag-panel">
+          ${flagMarkup(country, "question")}
+          <div class="country-meta">
+            <span>Rank #${country.rank}</span>
+            <strong>${country.name}</strong>
+            <small>${state.group === "top" ? "Top 5" : "Underdogs"} · Question ${state.questionIndex + 1} of ${country.questions.length}</small>
+          </div>
+        </aside>
+        <article class="question-panel">
+          <p class="event-line">Multiple choice</p>
+          <h2>${question.prompt}</h2>
+          <div class="answers">
+            ${question.options
+              .map((option, index) => {
+                const isCorrect = option === question.answer;
+                const isSelected = option === state.selectedAnswer;
+                const className = answered
+                  ? isCorrect
+                    ? "correct"
+                    : isSelected
+                      ? "incorrect"
+                      : "muted"
+                  : "";
+                return `<button class="answer ${className}" data-answer="${option}">
+                  <span>${String.fromCharCode(65 + index)}</span>${option}
+                </button>`;
+              })
+              .join("")}
+          </div>
+          ${
+            answered
+              ? `<div class="reveal">
+                  <span>Answer reveal</span>
+                  <strong>${question.answer}</strong>
+                  <p>${question.explanation}</p>
+                </div>`
+              : ""
+          }
+        </article>
+      </div>
     `,
-    )
-    .join("");
+    `<button class="button secondary" data-action="select">Countries</button>
+     <button class="button secondary" data-action="prev-question">Previous</button>
+     <button class="button primary" data-action="${answered ? "next-question" : "reveal"}">${answered ? "Next question" : "Reveal answer"}</button>`,
+  );
+
+  document.querySelectorAll("[data-answer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.selectedAnswer) {
+        state.selectedAnswer = button.dataset.answer;
+        renderQuestion();
+      }
+    });
+  });
+}
+
+function renderIdeas() {
+  slideShell(
+    `
+      <div class="ideas-layout">
+        <div>
+          <p class="event-line">Plan B, C, and D</p>
+          <h2>Other Away Day Quiz Formats</h2>
+        </div>
+        <div class="ideas-grid">
+          ${ideas
+            .map(
+              (idea, index) => `
+                <article>
+                  <span>${String(index + 1).padStart(2, "0")}</span>
+                  <h3>${idea.title}</h3>
+                  <p>${idea.body}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    `,
+    `<button class="button secondary" data-action="intro">Intro</button>
+     <button class="button primary" data-action="select">Start the quiz</button>`,
+  );
+}
+
+function bindDeckControls() {
+  document.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", () => runAction(button.dataset.action));
+  });
+}
+
+function runAction(action) {
+  if (action === "intro") state.view = "intro";
+  if (action === "select") state.view = "select";
+  if (action === "question") state.view = "question";
+  if (action === "ideas") state.view = "ideas";
+  if (action === "reveal") state.selectedAnswer = currentQuestion().answer;
+  if (action === "prev-question") moveQuestion(-1);
+  if (action === "next-question") moveQuestion(1);
+  render();
+}
+
+function moveQuestion(direction) {
+  const orderedCountries = orderedQuizCountries();
+  const country = currentCountry();
+  const absoluteCountryIndex = orderedCountries.findIndex((item) => item.id === country.id);
+  const nextQuestionIndex = state.questionIndex + direction;
+
+  if (nextQuestionIndex >= 0 && nextQuestionIndex < country.questions.length) {
+    state.questionIndex = nextQuestionIndex;
+  } else {
+    const nextCountryIndex =
+      (absoluteCountryIndex + direction + orderedCountries.length) % orderedCountries.length;
+    const nextCountry = orderedCountries[nextCountryIndex];
+    const nextGroupCountries = countries.filter((item) => item.group === nextCountry.group);
+    state.group = nextCountry.group;
+    state.countryIndex = nextGroupCountries.findIndex((item) => item.id === nextCountry.id);
+    state.questionIndex = direction > 0 ? 0 : nextCountry.questions.length - 1;
+  }
+
+  state.selectedAnswer = "";
+  state.view = "question";
 }
 
 function render() {
-  renderCountryList();
-  renderQuiz();
+  if (state.view === "intro") renderIntro();
+  if (state.view === "select") renderSelect();
+  if (state.view === "question") renderQuestion();
+  if (state.view === "ideas") renderIdeas();
 }
 
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    tabs.forEach((item) => item.classList.remove("active"));
-    tab.classList.add("active");
-    currentGroup = tab.dataset.group;
-    currentCountryIndex = 0;
-    currentQuestionIndex = 0;
-    render();
-  });
-});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight") {
+    if (state.view === "intro") runAction("select");
+    else if (state.view === "select") runAction("question");
+    else if (state.view === "question" && state.selectedAnswer) runAction("next-question");
+    else if (state.view === "question") runAction("reveal");
+  }
 
-prevQuestion.addEventListener("click", () => {
-  currentQuestionIndex =
-    (currentQuestionIndex - 1 + activeCountry().questions.length) % activeCountry().questions.length;
-  renderQuiz();
-});
+  if (event.key === "ArrowLeft") {
+    if (state.view === "question") runAction("prev-question");
+    else if (state.view === "select") runAction("intro");
+    else if (state.view === "ideas") runAction("intro");
+  }
 
-nextQuestion.addEventListener("click", () => {
-  currentQuestionIndex = (currentQuestionIndex + 1) % activeCountry().questions.length;
-  renderQuiz();
+  if (event.key.toLowerCase() === "i") runAction("ideas");
 });
 
 render();
-renderBank();
