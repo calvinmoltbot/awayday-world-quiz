@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>World Stage, Weird Facts</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23f2c14e'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='20' font-weight='900' fill='%2307111f'%3EWS%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700;8..60,800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="World Stage, Weird Facts">
+          <span class="brand-mark">WS</span>
+          <span>World Stage, Weird Facts</span>
+        </a>
+        <nav aria-label="Page sections">
+          <a href="#quiz">Quiz</a>
+          <a href="#countries">Countries</a>
+          <a href="#ideas">More ideas</a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="event-line">Work Away Day Quiz</p>
+            <h1 id="hero-title">World Stage, Weird Facts</h1>
+            <p>
+              A World Cup-flavoured quiz with zero football knowledge required.
+              Use the rankings as a hook, then ask the room about strange,
+              brilliant, and unexpected facts from each country.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="#quiz">Start the quiz</a>
+              <a class="button secondary" href="#ideas">See other formats</a>
+            </div>
+          </div>
+
+          <div class="flag-stage" aria-label="Animated Argentina flag opening">
+            <div class="flag-pole"></div>
+            <div class="flag flag-argentina hero-flag">
+              <span class="sun">✦</span>
+            </div>
+            <div class="stage-card">
+              <span>Opening country</span>
+              <strong>Argentina</strong>
+              <small>FIFA men’s ranking #1 in the April 2026 table</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="score-strip" aria-label="Quiz mode options">
+          <div>
+            <span class="strip-label">Mode</span>
+            <strong>Teams of 4-6</strong>
+          </div>
+          <div>
+            <span class="strip-label">Rounds</span>
+            <strong>Top 5 + Underdogs</strong>
+          </div>
+          <div>
+            <span class="strip-label">Questions</span>
+            <strong>50 editable prompts</strong>
+          </div>
+          <div>
+            <span class="strip-label">Tone</span>
+            <strong>Curious, not specialist</strong>
+          </div>
+        </section>
+
+        <section class="quiz-section" id="quiz" aria-labelledby="quiz-title">
+          <div class="section-heading">
+            <p class="event-line">Host screen</p>
+            <h2 id="quiz-title">Pick a country, reveal the flag, ask the room.</h2>
+          </div>
+
+          <div class="quiz-layout">
+            <aside class="country-panel" id="countries" aria-label="Country selector">
+              <div class="tabs" role="tablist" aria-label="Ranking groups">
+                <button class="tab active" data-group="top" role="tab">Top 5</button>
+                <button class="tab" data-group="underdog" role="tab">Underdogs</button>
+              </div>
+              <div class="country-list" id="countryList"></div>
+            </aside>
+
+            <article class="quiz-card" aria-live="polite">
+              <div class="quiz-card-header">
+                <div>
+                  <span class="strip-label" id="roundLabel">Round 1</span>
+                  <h3 id="countryName">Argentina</h3>
+                </div>
+                <div class="rank-pill" id="rankPill">Rank #1</div>
+              </div>
+
+              <div class="country-flag-wrap">
+                <div class="flag flag-argentina" id="activeFlag">
+                  <span class="sun">✦</span>
+                </div>
+              </div>
+
+              <p class="question" id="questionText"></p>
+              <div class="answers" id="answers"></div>
+
+              <div class="reveal" id="reveal" hidden>
+                <span>Answer reveal</span>
+                <strong id="correctAnswer"></strong>
+                <p id="explanation"></p>
+              </div>
+
+              <div class="quiz-actions">
+                <button class="button secondary" id="prevQuestion">Previous</button>
+                <button class="button primary" id="nextQuestion">Next question</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="question-bank" aria-labelledby="bank-title">
+          <div class="section-heading">
+            <p class="event-line">Sample content</p>
+            <h2 id="bank-title">Five-question country packs</h2>
+          </div>
+          <div class="bank-grid" id="bankGrid"></div>
+        </section>
+
+        <section class="ideas-section" id="ideas" aria-labelledby="ideas-title">
+          <div class="section-heading">
+            <p class="event-line">Plan B, C, and D</p>
+            <h2 id="ideas-title">Other Away Day Quiz Formats</h2>
+          </div>
+          <div class="ideas-grid">
+            <article>
+              <span>01</span>
+              <h3>Company World Cup</h3>
+              <p>
+                Teams “represent” departments. Each round is a country-style
+                challenge: office slang, project landmarks, client geography,
+                and guess-the-metric.
+              </p>
+            </article>
+            <article>
+              <span>02</span>
+              <h3>Passport Stamp Relay</h3>
+              <p>
+                Stations around the room. Each station has one quick challenge:
+                taste, map, emoji translation, speed puzzle, or mini pitch.
+              </p>
+            </article>
+            <article>
+              <span>03</span>
+              <h3>Pitch Deck or Fiction?</h3>
+              <p>
+                Read three dramatic business statements. Teams decide whether
+                each came from a real pitch deck, a press release, or was made up.
+              </p>
+            </article>
+            <article>
+              <span>04</span>
+              <h3>Inbox Archaeology</h3>
+              <p>
+                Turn harmless company history into a quiz: old product names,
+                launch dates, team rituals, office moves, and mystery screenshots.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
